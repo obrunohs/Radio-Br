@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Admin - ACDSFM</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: white; min-height: 100vh; padding: 20px; }
+    .wrap { width: min(1200px, 100%); margin: 0 auto; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 20px; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+    h1, h2, h3 { margin-top: 0; }
+    input, select, button { width: 100%; padding: 12px; border-radius: 12px; border: 0; margin: 6px 0; font-size: 15px; }
+    input, select { background: #020617; color: white; border: 1px solid #334155; }
+    button { cursor: pointer; font-weight: bold; }
+    #loginBtn { background: #38bdf8; color: #082f49; }
+    .start { background: #22c55e; color: #052e16; }
+    .stop { background: #ef4444; color: white; }
+    .blue { background: #2563eb; color: white; }
+    .yellow { background: #facc15; color: #422006; }
+    .danger { background: #dc2626; color: white; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .hidden { display: none; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .box { background: #020617; border: 1px solid #334155; border-radius: 16px; padding: 16px; }
+    .status { padding: 12px; background: #020617; border-radius: 12px; margin: 14px 0; color: #cbd5e1; border: 1px solid #334155; }
+    video { width: 100%; aspect-ratio: 16/9; background: #020617; border-radius: 16px; object-fit: cover; border: 1px solid #334155; }
+    .meter { height: 12px; background: #020617; border-radius: 999px; overflow: hidden; margin-top: 12px; border: 1px solid #334155; }
+    .bar { height: 100%; width: 0%; background: #22c55e; }
+    .chat { background: #020617; border: 1px solid #334155; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; height: 720px; min-height: 0; }
+    .chat h3 { margin: 0; padding: 12px; border-bottom: 1px solid #334155; }
+    #chatMessages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+    .msg { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 9px 10px; margin-bottom: 8px; overflow-wrap: anywhere; }
+    .msg strong { color: #38bdf8; }
+    .msg.admin { border-color: rgba(250,204,21,.75); background: linear-gradient(135deg, rgba(250,204,21,.18), rgba(17,24,39,.92)); box-shadow: 0 0 20px rgba(250,204,21,.18); }
+    .msg.admin strong { color: #facc15; }
+    .msg.private { border-color: rgba(168,85,247,.85); }
+    .chat-form { border-top: 1px solid #334155; padding: 12px; display: grid; gap: 8px; }
+    .users { margin-top: 14px; }
+    .user { background: #020617; border: 1px solid #334155; border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+    .user strong { display: block; margin-bottom: 8px; }
+    .user .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .user .actions button { padding: 8px; font-size: 12px; margin: 0; }
+    .note { color:#94a3b8; line-height: 1.5; }
+    @media (max-width: 950px) { .grid, .controls { grid-template-columns: 1fr; } .chat { height: 600px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>Painel Admin - ACDSFM</h1>
+
+      <section id="loginArea">
+        <p>Digite a senha para acessar a transmissão.</p>
+        <input id="password" type="password" placeholder="Senha do admin" />
+        <button id="loginBtn">Entrar</button>
+      </section>
+
+      <section id="adminArea" class="hidden">
+        <div class="status" id="statusBox">Painel conectado. Escolha TV com câmera/microfone ou rádio somente áudio.</div>
+        <div class="grid">
+          <div>
+            <div class="controls">
+              <section class="box">
+                <h2>TV ao vivo</h2>
+                <p class="note">Transmite webcam + microfone para a TV do site.</p>
+                <video id="tvPreview" autoplay muted playsinline></video>
+                <button id="startTvBtn" class="start">Iniciar TV com câmera e microfone</button>
+                <button id="stopTvBtn" class="stop" disabled>Parar TV</button>
+              </section>
+
+              <section class="box">
+                <h2>Rádio ao vivo</h2>
+                <p class="note">Transmite somente o áudio do microfone.</p>
+                <div class="meter"><div id="bar" class="bar"></div></div>
+                <button id="startRadioBtn" class="blue">Entrar ao vivo na rádio somente áudio</button>
+                <button id="stopRadioBtn" class="stop" disabled>Parar rádio</button>
+              </section>
+            </div>
+
+            <p>Ouvintes conectados: <strong id="listeners">0</strong></p>
+            <p>Status TV: <strong id="tvState">OFFLINE</strong> | Status Rádio: <strong id="radioState">OFFLINE</strong></p>
+            <p class="note">Dica: use fone de ouvido para evitar eco. O chat fica online mesmo sem transmissão.</p>
+
+            <section class="users box">
+              <h3>Ouvintes no chat</h3>
+              <div id="userList"><p class="note">Nenhum ouvinte cadastrado no chat.</p></div>
+            </section>
+          </div>
+
+          <aside class="chat">
+            <h3>Chat ao vivo</h3>
+            <div id="chatMessages"></div>
+            <form id="adminChatForm" class="chat-form">
+              <select id="targetUser"><option value="">Mensagem pública para todos</option></select>
+              <input id="adminChatText" maxlength="220" placeholder="Digite sua mensagem como admin..." />
+              <button class="yellow" type="submit">Enviar como ADMIN</button>
+            </form>
+          </aside>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const loginArea = document.getElementById('loginArea');
+    const adminArea = document.getElementById('adminArea');
+    const loginBtn = document.getElementById('loginBtn');
+    const passwordInput = document.getElementById('password');
+    const startTvBtn = document.getElementById('startTvBtn');
+    const stopTvBtn = document.getElementById('stopTvBtn');
+    const startRadioBtn = document.getElementById('startRadioBtn');
+    const stopRadioBtn = document.getElementById('stopRadioBtn');
+    const statusBox = document.getElementById('statusBox');
+    const listenersText = document.getElementById('listeners');
+    const tvState = document.getElementById('tvState');
+    const radioState = document.getElementById('radioState');
+    const bar = document.getElementById('bar');
+    const tvPreview = document.getElementById('tvPreview');
+    const chatMessages = document.getElementById('chatMessages');
+    const adminChatForm = document.getElementById('adminChatForm');
+    const adminChatText = document.getElementById('adminChatText');
+    const targetUser = document.getElementById('targetUser');
+    const userList = document.getElementById('userList');
+
+    let tvStream = null, radioStream = null, audioContext = null;
+    const tvPeers = new Map(), radioPeers = new Map();
+    const users = new Map();
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+
+    loginBtn.onclick = () => {
+      socket.emit('admin-auth', passwordInput.value, (response) => {
+        if (!response || !response.ok) { alert((response && response.message) || 'Nao foi possivel entrar.'); return; }
+        loginArea.classList.add('hidden');
+        adminArea.classList.remove('hidden');
+      });
+    };
+
+    socket.on('status', (status) => {
+      listenersText.textContent = status.listeners || 0;
+      tvState.textContent = status.tvLive ? 'AO VIVO' : 'OFFLINE';
+      radioState.textContent = status.radioLive ? 'AO VIVO' : 'OFFLINE';
+    });
+
+    startTvBtn.onclick = async () => {
+      try {
+        tvStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } });
+        tvPreview.srcObject = tvStream;
+        socket.emit('start-tv');
+        startTvBtn.disabled = true; stopTvBtn.disabled = false;
+        statusBox.textContent = 'TV transmitindo câmera e microfone.';
+      } catch (error) { alert('Nao foi possivel acessar câmera/microfone.'); }
+    };
+
+    stopTvBtn.onclick = () => { socket.emit('stop-tv'); stopTv(); statusBox.textContent = 'TV encerrada.'; };
+
+    startRadioBtn.onclick = async () => {
+      try {
+        radioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        socket.emit('start-radio');
+        startRadioBtn.disabled = true; stopRadioBtn.disabled = false;
+        statusBox.textContent = 'Rádio transmitindo somente áudio.';
+        startAudioMeter(radioStream);
+      } catch (error) { alert('Nao foi possivel acessar o microfone.'); }
+    };
+
+    stopRadioBtn.onclick = () => { socket.emit('stop-radio'); stopRadio(); statusBox.textContent = 'Rádio encerrada.'; };
+
+    socket.on('listener-ready', async ({ id, type }) => {
+      const stream = type === 'tv' ? tvStream : radioStream;
+      if (!stream) return;
+      const pc = new RTCPeerConnection(rtcConfig);
+      const map = type === 'tv' ? tvPeers : radioPeers;
+      map.set(id, pc);
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      pc.onicecandidate = (event) => { if (event.candidate) socket.emit('ice-candidate', { to: id, candidate: event.candidate, type }); };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { to: id, offer, type });
+    });
+
+    socket.on('answer', async ({ from, answer, type }) => {
+      const pc = (type === 'tv' ? tvPeers : radioPeers).get(from);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on('ice-candidate', async ({ from, candidate, type }) => {
+      const pc = (type === 'tv' ? tvPeers : radioPeers).get(from);
+      if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+
+    socket.on('listener-disconnected', (listenerId) => {
+      [tvPeers, radioPeers].forEach(map => { const pc = map.get(listenerId); if (pc) pc.close(); map.delete(listenerId); });
+    });
+
+    function stopTv() { tvPeers.forEach(pc => pc.close()); tvPeers.clear(); if (tvStream) tvStream.getTracks().forEach(track => track.stop()); tvStream = null; tvPreview.srcObject = null; startTvBtn.disabled = false; stopTvBtn.disabled = true; }
+    function stopRadio() { radioPeers.forEach(pc => pc.close()); radioPeers.clear(); if (radioStream) radioStream.getTracks().forEach(track => track.stop()); radioStream = null; startRadioBtn.disabled = false; stopRadioBtn.disabled = true; bar.style.width = '0%'; if (audioContext) audioContext.close().catch(() => {}); audioContext = null; }
+
+    socket.on('chat-history', (messages) => { chatMessages.innerHTML = ''; (messages || []).forEach(addChatMessage); });
+    socket.on('chat-message', addChatMessage);
+
+    adminChatForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = adminChatText.value.trim();
+      if (!text) return;
+      socket.emit('admin-message', { text, to: targetUser.value || null });
+      adminChatText.value = '';
+    });
+
+    socket.on('chat-users', (list) => {
+      users.clear();
+      (list || []).forEach(u => users.set(u.id, u));
+      renderUsers();
+    });
+
+    function renderUsers() {
+      targetUser.innerHTML = '<option value="">Mensagem pública para todos</option>';
+      userList.innerHTML = '';
+      if (!users.size) { userList.innerHTML = '<p class="note">Nenhum ouvinte cadastrado no chat.</p>'; return; }
+      users.forEach((u) => {
+        const opt = document.createElement('option'); opt.value = u.id; opt.textContent = 'PV para ' + u.name; targetUser.appendChild(opt);
+        const div = document.createElement('div'); div.className = 'user';
+        div.innerHTML = `<strong></strong><div class="actions"><button class="blue" data-a="pv">PV</button><button class="yellow" data-a="mute">Silenciar</button><button class="stop" data-a="kick">Expulsar</button><button class="danger" data-a="ban">Banir</button></div>`;
+        div.querySelector('strong').textContent = u.name + (u.muted ? ' · silenciado' : '');
+        div.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+          const action = btn.dataset.a;
+          if (action === 'pv') { targetUser.value = u.id; adminChatText.focus(); return; }
+          socket.emit('moderate-user', { userId: u.id, action });
+        });
+        userList.appendChild(div);
+      });
+    }
+
+    function addChatMessage(msg) {
+      const item = document.createElement('div');
+      item.className = 'msg' + (msg.role === 'admin' ? ' admin' : '') + (msg.private ? ' private' : '');
+      item.innerHTML = `<strong></strong><br><span></span>`;
+      item.querySelector('strong').textContent = (msg.private ? '🔒 ' : '') + (msg.name || 'Ouvinte');
+      item.querySelector('span').textContent = msg.text || '';
+      chatMessages.appendChild(item);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function startAudioMeter(stream) {
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      source.connect(analyser);
+      function tick() {
+        if (!radioStream) return;
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        bar.style.width = Math.min(100, avg * 2) + '%';
+        requestAnimationFrame(tick);
+      }
+      tick();
+    }
+  </script>
+</body>
+</html>
