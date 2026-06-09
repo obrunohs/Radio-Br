@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Admin - ACDSFM</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: white; min-height: 100vh; padding: 20px; }
+    .wrap { width: min(1100px, 100%); margin: 0 auto; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 20px; padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+    h1 { margin-top: 0; }
+    input, button { width: 100%; padding: 14px; border-radius: 12px; border: 0; margin: 8px 0; font-size: 16px; }
+    input { background: #020617; color: white; border: 1px solid #334155; }
+    button { cursor: pointer; font-weight: bold; }
+    #loginBtn { background: #38bdf8; color: #082f49; }
+    #startBtn { background: #22c55e; color: #052e16; }
+    #stopBtn { background: #ef4444; color: white; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .hidden { display: none; }
+    .grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+    .status { padding: 12px; background: #020617; border-radius: 12px; margin: 14px 0; color: #cbd5e1; }
+    video { width: 100%; aspect-ratio: 16/9; background: #020617; border-radius: 16px; object-fit: cover; border: 1px solid #334155; }
+    .meter { height: 12px; background: #020617; border-radius: 999px; overflow: hidden; margin-top: 12px; }
+    .bar { height: 100%; width: 0%; background: #22c55e; }
+    .chat { background: #020617; border: 1px solid #334155; border-radius: 16px; overflow: hidden; }
+    .chat h3 { margin: 0; padding: 12px; border-bottom: 1px solid #334155; }
+    #chatMessages { height: 360px; overflow-y: auto; padding: 12px; }
+    .msg { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 9px 10px; margin-bottom: 8px; overflow-wrap: anywhere; }
+    .msg strong { color: #38bdf8; }
+    .note { color:#94a3b8; line-height: 1.5; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>Painel Admin - ACDSFM</h1>
+
+      <section id="loginArea">
+        <p>Digite a senha para acessar a transmissão.</p>
+        <input id="password" type="password" placeholder="Senha do admin" />
+        <button id="loginBtn">Entrar</button>
+      </section>
+
+      <section id="adminArea" class="hidden">
+        <div class="grid">
+          <div>
+            <div class="status" id="statusBox">Pronto para iniciar a rádio e TV ao vivo.</div>
+            <video id="preview" autoplay muted playsinline></video>
+            <button id="startBtn">Iniciar transmissão com câmera e microfone</button>
+            <button id="stopBtn" disabled>Parar transmissão</button>
+            <p>Ouvintes conectados: <strong id="listeners">0</strong></p>
+            <div class="meter"><div id="bar" class="bar"></div></div>
+            <p class="note">Dica: use fone de ouvido para evitar eco. O vídeo aparece no site principal no bloco TV ACDSFM.</p>
+          </div>
+
+          <aside class="chat">
+            <h3>Chat ao vivo</h3>
+            <div id="chatMessages"></div>
+          </aside>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const loginArea = document.getElementById('loginArea');
+    const adminArea = document.getElementById('adminArea');
+    const loginBtn = document.getElementById('loginBtn');
+    const passwordInput = document.getElementById('password');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusBox = document.getElementById('statusBox');
+    const listenersText = document.getElementById('listeners');
+    const bar = document.getElementById('bar');
+    const preview = document.getElementById('preview');
+    const chatMessages = document.getElementById('chatMessages');
+
+    let localStream = null;
+    let audioContext = null;
+    const peers = new Map();
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    loginBtn.onclick = () => {
+      socket.emit('admin-auth', passwordInput.value, (response) => {
+        if (!response.ok) {
+          alert(response.message || 'Nao foi possivel entrar.');
+          return;
+        }
+        loginArea.classList.add('hidden');
+        adminArea.classList.remove('hidden');
+      });
+    };
+
+    socket.on('status', (status) => {
+      listenersText.textContent = status.listeners || 0;
+    });
+
+    startBtn.onclick = async () => {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+        });
+        preview.srcObject = localStream;
+        socket.emit('start-live');
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        statusBox.textContent = 'Transmitindo áudio e vídeo ao vivo.';
+        startAudioMeter(localStream);
+      } catch (error) {
+        alert('Nao foi possivel acessar câmera/microfone. Verifique as permissoes do navegador.');
+      }
+    };
+
+    stopBtn.onclick = () => {
+      socket.emit('stop-live');
+      stopAll();
+      statusBox.textContent = 'Transmissao encerrada.';
+    };
+
+    socket.on('listener-ready', async (listenerId) => {
+      if (!localStream) return;
+
+      const pc = new RTCPeerConnection(rtcConfig);
+      peers.set(listenerId, pc);
+
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) socket.emit('ice-candidate', { to: listenerId, candidate: event.candidate });
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { to: listenerId, offer });
+    });
+
+    socket.on('answer', async ({ from, answer }) => {
+      const pc = peers.get(from);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on('ice-candidate', async ({ from, candidate }) => {
+      const pc = peers.get(from);
+      if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+
+    socket.on('listener-disconnected', (listenerId) => {
+      const pc = peers.get(listenerId);
+      if (pc) pc.close();
+      peers.delete(listenerId);
+    });
+
+    socket.on('chat-history', (messages) => {
+      chatMessages.innerHTML = '';
+      (messages || []).forEach(addChatMessage);
+    });
+
+    socket.on('chat-message', addChatMessage);
+
+    function addChatMessage(msg) {
+      const item = document.createElement('div');
+      item.className = 'msg';
+      item.innerHTML = `<strong></strong><br><span></span>`;
+      item.querySelector('strong').textContent = msg.name || 'Ouvinte';
+      item.querySelector('span').textContent = msg.text || '';
+      chatMessages.appendChild(item);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function stopAll() {
+      peers.forEach(pc => pc.close());
+      peers.clear();
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+      preview.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      bar.style.width = '0%';
+      if (audioContext) audioContext.close().catch(() => {});
+      audioContext = null;
+    }
+
+    function startAudioMeter(stream) {
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      source.connect(analyser);
+
+      function tick() {
+        if (!localStream) return;
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        bar.style.width = Math.min(100, avg * 2) + '%';
+        requestAnimationFrame(tick);
+      }
+      tick();
+    }
+  </script>
+</body>
+</html>
