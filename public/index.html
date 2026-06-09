@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radio Ao Vivo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #111827, #1f2937);
+      color: white;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 22px;
+      padding: 34px 28px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 { margin: 0 0 10px; font-size: 36px; }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      margin: 16px 0;
+      font-weight: bold;
+      letter-spacing: .5px;
+    }
+    .dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      box-shadow: 0 0 10px rgba(203,213,225,.35);
+      transition: .25s;
+    }
+    .dot.live {
+      background: #ef4444;
+      box-shadow: 0 0 20px #ef4444;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: .75; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .small { color: #d1d5db; line-height: 1.5; }
+    .warning {
+      display: none;
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(251,191,36,.14);
+      color: #fde68a;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    audio { display: none; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Minha Radio</h1>
+    <div class="status"><span id="dot" class="dot"></span><span id="statusText">OFFLINE</span></div>
+    <p class="small" id="message">A transmissão começa automaticamente quando o admin entrar ao vivo.</p>
+    <p class="small">Ouvintes conectados: <strong id="listeners">0</strong></p>
+    <p class="warning" id="warning">Seu navegador bloqueou o áudio automático. Toque uma vez na tela ou recarregue a página para liberar o som.</p>
+    <audio id="audio" autoplay playsinline></audio>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const audio = document.getElementById('audio');
+    const dot = document.getElementById('dot');
+    const statusText = document.getElementById('statusText');
+    const listenersText = document.getElementById('listeners');
+    const message = document.getElementById('message');
+    const warning = document.getElementById('warning');
+
+    let peerConnection = null;
+    let adminId = null;
+    let requestedConnection = false;
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    function requestLiveAudio() {
+      if (requestedConnection) return;
+      requestedConnection = true;
+      message.textContent = 'Conectando na transmissão ao vivo...';
+      socket.emit('listener-ready');
+    }
+
+    function resetLiveAudio() {
+      requestedConnection = false;
+      if (peerConnection) peerConnection.close();
+      peerConnection = null;
+      audio.srcObject = null;
+      warning.style.display = 'none';
+    }
+
+    socket.on('status', (status) => {
+      listenersText.textContent = status.listeners || 0;
+
+      if (status.isLive) {
+        dot.classList.add('live');
+        statusText.textContent = 'AO VIVO';
+        message.textContent = 'Transmissão ao vivo no ar.';
+        requestLiveAudio();
+      } else {
+        dot.classList.remove('live');
+        statusText.textContent = 'OFFLINE';
+        message.textContent = 'A transmissão começa automaticamente quando o admin entrar ao vivo.';
+        resetLiveAudio();
+      }
+    });
+
+    socket.on('offer', async ({ from, offer }) => {
+      adminId = from;
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      peerConnection.ontrack = (event) => {
+        audio.srcObject = event.streams[0];
+        audio.play().then(() => {
+          warning.style.display = 'none';
+          message.textContent = 'Você está ouvindo a transmissão ao vivo.';
+        }).catch(() => {
+          warning.style.display = 'block';
+        });
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice-candidate', { to: adminId, candidate: event.candidate });
+        }
+      };
+
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit('answer', { to: adminId, answer });
+    });
+
+    socket.on('ice-candidate', async ({ candidate }) => {
+      if (peerConnection && candidate) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    });
+
+    socket.on('live-ended', () => {
+      resetLiveAudio();
+      dot.classList.remove('live');
+      statusText.textContent = 'OFFLINE';
+      message.textContent = 'Transmissão encerrada.';
+    });
+
+    document.body.addEventListener('click', () => {
+      if (audio.srcObject) audio.play().catch(() => {});
+    });
+  </script>
+</body>
+</html>
