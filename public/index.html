@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ACDSFM - Ao Vivo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: radial-gradient(circle at top, #1e293b, #020617 58%); color: white; min-height: 100vh; }
+    header { width: min(100% - 32px, 1180px); margin: 0 auto; padding: 20px 0 14px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: flex; flex-direction: column; gap: 3px; } .brand strong { font-size: 28px; letter-spacing: 2px; } .brand span { color: #94a3b8; font-size: 14px; }
+    .live-pill { display: inline-flex; align-items: center; gap: 9px; background: rgba(15,23,42,.92); border: 1px solid #334155; padding: 10px 14px; border-radius: 999px; font-weight: 800; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: #cbd5e1; box-shadow: 0 0 0 rgba(239,68,68,0); } .dot.live { background: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,.9); animation: pulse 1.2s infinite; } @keyframes pulse { 50% { transform: scale(1.2); } }
+    .page { width: min(100% - 32px, 1180px); margin: 0 auto 28px; }
+    .hero { width: calc((100% - 22px) * .68); text-align: center; margin-bottom: 14px; } .hero h1 { margin: 0; font-size: 34px; } .hero p { margin: 8px 0 0; color: #cbd5e1; }
+    .warning { display: none; background: #facc15; color: #422006; border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; font-weight: 700; }
+    .layout { display: grid; grid-template-columns: minmax(0, .68fr) minmax(300px, .32fr); gap: 22px; align-items: start; }
+    .tv-card, .chat-card { background: rgba(15,23,42,.94); border: 1px solid #334155; border-radius: 22px; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+    .tv-title, .chat-title { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.1); display: flex; justify-content: space-between; align-items: center; font-weight: 800; }
+    .tv-title span:last-child, .chat-title span:last-child { color: #94a3b8; font-size: 13px; }
+    .tv-area { position: relative; width: 100%; aspect-ratio: 16/9; background: #020617; overflow: hidden; }
+    #liveVideo, #youtubeBox, #youtubePlayer, #youtubeBox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+    #liveVideo { object-fit: cover; background: #020617; }
+    #youtubeBox { display: none; background: #000; z-index: 2; }
+    .offline-screen { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: linear-gradient(135deg, #020617, #111827); color: #cbd5e1; z-index: 3; }
+    .offline-screen h2 { margin: 0 0 8px; font-size: 32px; color: white; } .offline-screen p { margin: 0; }
+    .chat-card { display: flex; flex-direction: column; height: 460px; min-height: 0; }
+    .chat-card * { min-height: 0; } #chatMessages { flex: 1; padding: 12px 14px; overflow-y: auto; }
+    .msg { padding: 6px 2px; margin-bottom: 8px; overflow-wrap: anywhere; background: transparent; border: 0; border-radius: 0; } .msg strong { color: #38bdf8; } .msg span { color: #cbd5e1; }
+    .msg.admin { color: #fff7cc; text-shadow: 0 0 10px rgba(250,204,21,.45); } .msg.admin strong { color: #facc15; text-shadow: 0 0 12px rgba(250,204,21,.75); } .msg.private { color: #e9d5ff; }
+    .name-box, .chat-form { border-top: 1px solid rgba(255,255,255,.1); padding: 12px; display: grid; gap: 8px; } .name-box p { margin: 0; color: #cbd5e1; font-size: 14px; }
+    .chat-form { grid-template-columns: 1fr 82px; } input, button { width: 100%; border: 0; border-radius: 12px; padding: 11px; font-size: 14px; } input { background: #020617; color: white; border: 1px solid #334155; } button { background: #ef4444; color: white; font-weight: bold; cursor: pointer; } button:disabled { opacity: .5; cursor: not-allowed; }
+    .hidden { display: none !important; } audio { display: none; }
+    @media (max-width: 900px) { header { align-items: flex-start; flex-direction: column; } .page { width: min(100% - 24px, 1180px); } .hero { width: 100%; } .layout { grid-template-columns: 1fr; } .chat-card { height: 380px; } }
+  </style>
+</head>
+<body>
+  <header><div class="brand"><strong>ACDSFM</strong><span>Rádio e TV ao vivo</span></div><div class="live-pill"><span id="dot" class="dot"></span><span id="statusText">OFFLINE</span></div></header>
+  <main class="page">
+    <section class="hero"><h1>ACDSFM AO VIVO</h1><p id="message">A transmissão começa automaticamente quando o admin entrar ao vivo.</p></section>
+    <p class="warning" id="warning">Seu navegador bloqueou o áudio/vídeo automático. Toque uma vez na tela para liberar a transmissão.</p>
+    <section class="layout">
+      <div><section class="tv-card"><div class="tv-title"><span>TV ACDSFM</span><span id="tvStatus">TV offline</span></div><div class="tv-area"><video id="liveVideo" autoplay playsinline></video><div id="youtubeBox"><div id="youtubePlayer"></div></div><div id="offlineScreen" class="offline-screen"><div><h2>TV OFFLINE</h2><p>Aguardando a próxima transmissão ao vivo.</p></div></div></div></section><audio id="radioAudio" autoplay playsinline></audio></div>
+      <aside class="chat-card"><div class="chat-title"><span>Chat ao vivo</span><span id="chatStatus">online</span></div><div id="chatMessages"></div><div id="nameBox" class="name-box"><p>Escolha um nome para participar do chat.</p><input id="nameInput" maxlength="20" placeholder="Seu nome"/><button id="saveNameBtn">Cadastrar nome</button></div><form id="chatForm" class="chat-form hidden"><input id="chatText" maxlength="180" placeholder="Digite sua mensagem..."/><button type="submit">Enviar</button></form></aside>
+    </section>
+  </main>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket=io(); const liveVideo=document.getElementById('liveVideo'), radioAudio=document.getElementById('radioAudio'), youtubeBox=document.getElementById('youtubeBox'), offlineScreen=document.getElementById('offlineScreen'), dot=document.getElementById('dot'), statusText=document.getElementById('statusText'), message=document.getElementById('message'), warning=document.getElementById('warning'), tvStatus=document.getElementById('tvStatus'), chatForm=document.getElementById('chatForm'), chatText=document.getElementById('chatText'), chatMessages=document.getElementById('chatMessages'), nameBox=document.getElementById('nameBox'), nameInput=document.getElementById('nameInput'), saveNameBtn=document.getElementById('saveNameBtn');
+    let tvPc=null,radioPc=null,adminId=null,tvRequested=false,radioRequested=false,canChat=false,currentYoutube={liveId:'',liveActive:false,playlist:[]},lastStatus={}; const rtcConfig={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
+    const savedName=localStorage.getItem('acdsfm-chat-name')||''; if(savedName) nameInput.value=savedName;
+    function cleanYouTubeId(v){ v=String(v||'').trim(); if(!v)return''; const m=v.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|live\/|shorts\/))([A-Za-z0-9_-]{6,})/)||v.match(/[?&]v=([A-Za-z0-9_-]{6,})/); return m?m[1]:v.replace(/[^A-Za-z0-9_-]/g,'').slice(0,80); }
+    function makeYoutubeSrc(videoId,playlist){ videoId=cleanYouTubeId(videoId); const ids=(playlist||[]).map(cleanYouTubeId).filter(Boolean); if(!videoId&&ids.length) videoId=ids[0]; if(!videoId)return''; const params=new URLSearchParams({autoplay:'1',mute:'1',controls:'1',rel:'0',modestbranding:'1',playsinline:'1'}); if(ids.length){ params.set('loop','1'); params.set('playlist',ids.join(',')); } return 'https://www.youtube.com/embed/'+encodeURIComponent(videoId)+'?'+params.toString(); }
+    function makeYoutubePlayer(videoId,playlist){ const src=makeYoutubeSrc(videoId,playlist); if(!src)return; let iframe=document.getElementById('youtubeFrame'); if(!iframe){ iframe=document.createElement('iframe'); iframe.id='youtubeFrame'; iframe.allow='autoplay; encrypted-media; picture-in-picture; fullscreen'; iframe.allowFullscreen=true; iframe.referrerPolicy='strict-origin-when-cross-origin'; document.getElementById('youtubePlayer').innerHTML=''; document.getElementById('youtubePlayer').appendChild(iframe); } if(iframe.src!==src) iframe.src=src; }
+    function showYoutube(videoId,playlist){ resetTv(false); liveVideo.style.display='none'; youtubeBox.style.display='block'; offlineScreen.style.display='none'; makeYoutubePlayer(videoId,playlist); }
+    function hideYoutube(){ youtubeBox.style.display='none'; liveVideo.style.display='block'; const iframe=document.getElementById('youtubeFrame'); if(iframe) iframe.src='about:blank'; }
+    function playPlaylistLocal(){ const list=(currentYoutube.playlist||[]).filter(Boolean); if(list.length) showYoutube(list[0],list); else showOffline(); }
+    function showOffline(){ hideYoutube(); resetTv(false); offlineScreen.style.display='grid'; tvStatus.textContent='TV offline'; }
+    function requestTv(){ if(tvRequested)return; tvRequested=true; socket.emit('listener-ready',{type:'tv'}); }
+    function requestRadio(){ if(radioRequested)return; radioRequested=true; socket.emit('listener-ready',{type:'radio'}); }
+    function resetTv(clear=true){ tvRequested=false; if(tvPc)tvPc.close(); tvPc=null; liveVideo.srcObject=null; if(clear) offlineScreen.style.display='grid'; }
+    function resetRadio(){ radioRequested=false; if(radioPc)radioPc.close(); radioPc=null; radioAudio.srcObject=null; }
+    function applyTvSource(status){ lastStatus=status||lastStatus||{}; const list=(currentYoutube.playlist||[]).filter(Boolean); const isYoutube=lastStatus.videoSource==='youtube'; if(isYoutube && currentYoutube.liveActive && currentYoutube.liveId){ tvStatus.textContent='YouTube Live'; showYoutube(currentYoutube.liveId,null); return; } if(lastStatus.tvLive && lastStatus.videoSource==='webcam'){ hideYoutube(); tvStatus.textContent='TV ao vivo'; offlineScreen.style.display='grid'; requestTv(); return; } if(list.length){ tvStatus.textContent='Programação local'; showYoutube(list[0],list); return; } showOffline(); }
+    socket.on('youtube-settings',s=>{currentYoutube=s||{liveId:'',liveActive:false,playlist:[]}; applyTvSource(lastStatus)});
+    socket.on('status',status=>{lastStatus=status||{}; const playlistOn=(currentYoutube.playlist||[]).some(Boolean)&&!status.isLive; dot.classList.toggle('live',!!status.isLive); statusText.textContent=status.isLive?'AO VIVO':(playlistOn?'PROGRAMAÇÃO LOCAL':'OFFLINE'); message.textContent=status.isLive?'Transmissão ao vivo no ar.':(playlistOn?'Programação local da ACDSFM na TV.':'A transmissão começa automaticamente quando o admin entrar ao vivo.'); applyTvSource(status); if(status.radioLive) requestRadio(); else resetRadio(); });
+    socket.on('offer',async({from,offer,type})=>{adminId=from; const pc=new RTCPeerConnection(rtcConfig); if(type==='tv')tvPc=pc;else radioPc=pc; const media=type==='tv'?liveVideo:radioAudio; pc.ontrack=event=>{media.srcObject=event.streams[0]; if(type==='tv'){hideYoutube();offlineScreen.style.display='none'} media.play().then(()=>warning.style.display='none').catch(()=>warning.style.display='block')}; pc.onicecandidate=event=>{if(event.candidate)socket.emit('ice-candidate',{to:adminId,candidate:event.candidate,type})}; await pc.setRemoteDescription(new RTCSessionDescription(offer)); const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit('answer',{to:adminId,answer,type}); });
+    socket.on('ice-candidate',async({candidate,type})=>{const pc=type==='tv'?tvPc:radioPc;if(pc&&candidate)await pc.addIceCandidate(new RTCIceCandidate(candidate))}); socket.on('live-ended',({type})=>{if(type==='radio')resetRadio(); else if(type==='all')resetRadio(); setTimeout(()=>applyTvSource(lastStatus),80);});
+    saveNameBtn.onclick=()=>{const name=nameInput.value.trim();socket.emit('register-name',{name},r=>{if(!r||!r.ok){alert((r&&r.message)||'Nao foi possivel cadastrar.');return}localStorage.setItem('acdsfm-chat-name',r.name);canChat=true;nameBox.classList.add('hidden');chatForm.classList.remove('hidden');chatText.focus()})};
+    chatForm.addEventListener('submit',e=>{e.preventDefault();if(!canChat)return;const text=chatText.value.trim();if(!text)return;socket.emit('chat-message',{text});chatText.value=''}); socket.on('chat-history',messages=>{chatMessages.innerHTML='';(messages||[]).forEach(addChatMessage)}); socket.on('chat-message',addChatMessage); socket.on('chat-error',msg=>alert(msg)); socket.on('moderated',({message})=>{alert(message);canChat=false;chatForm.classList.add('hidden');nameBox.classList.remove('hidden')}); socket.on('volume-settings',({radioLiveVolume,tvLiveVolume}={})=>{if(typeof radioLiveVolume==='number')radioAudio.volume=Math.max(0,Math.min(1,radioLiveVolume)); if(typeof tvLiveVolume==='number')liveVideo.volume=Math.max(0,Math.min(1,tvLiveVolume));});
+    function addChatMessage(msg){const item=document.createElement('div');item.className='msg'+(msg.role==='admin'?' admin':'')+(msg.private?' private':'');item.innerHTML='<strong></strong><br><span></span>';item.querySelector('strong').textContent=(msg.private?'🔒 ':'')+(msg.name||'Ouvinte');item.querySelector('span').textContent=msg.text||'';chatMessages.appendChild(item);chatMessages.scrollTop=chatMessages.scrollHeight}
+    document.body.addEventListener('click',()=>{if(liveVideo.srcObject)liveVideo.play().catch(()=>{});if(radioAudio.srcObject)radioAudio.play().catch(()=>{})});
+  </script>
+</body>
+</html>
